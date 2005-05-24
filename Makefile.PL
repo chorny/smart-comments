@@ -1,19 +1,21 @@
-#!/usr/bin/env perl
+use strict;
+use warnings;
+use ExtUtils::MakeMaker;
 
-use inc::Module::Install;
-
-name		('Smart-Comments');
-author		('Damian Conway <damian@conway.org>');
-abstract	('Comments that come to life');
-license		('perl');
-version_from	('lib/Smart/Comments.pm');
-
-requires        (qw(
-    perl            5.006
-    List::Util      0
-    Filter::Simple  0
-));
-build_requires  ('Test::More');
-auto_include_deps();
-
-WriteAll( sign => 1 );
+WriteMakefile(
+    NAME                => 'Smart::Comments',
+    AUTHOR              => 'Damian Conway <DCONWAY@cpan.org>',
+    VERSION_FROM        => 'lib/Smart/Comments.pm',
+    ABSTRACT_FROM       => 'lib/Smart/Comments.pm',
+    PL_FILES            => {},
+    PREREQ_PM => {
+        'Test::More' => 0,
+        'version'    => 0,
+        'Text::Balanced' => 0,
+        'Data::Dumper'   => 0,
+        'Filter::Simple' => 0,
+        'List::Util'     => 0,
+    },
+    dist                => { COMPRESS => 'gzip -9f', SUFFIX => 'gz', },
+    clean               => { FILES => 'Smart-Comments-*' },
+);

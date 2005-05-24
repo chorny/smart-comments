@@ -1,353 +1,925 @@
 package Smart::Comments;
 
-use 5.006;
-our $VERSION = '0.01';
+use version; $VERSION = qv('0.0.2');
 
+use warnings;
 use strict;
+use Carp;
+
 use List::Util qw(sum);
+
 use Filter::Simple;
 
-our $maxwidth         = 79;     # Maximum width of display
-our $showwidth        = 40;     # How wide to make the indicator
-our $showstarttime    = 6;      # How long before showing time-remaining estimate
-our $showmaxtime      = 10;     # Don't start estimate if less than this to go
-our $whilerate        = 30;     # Controls the rate at which while indicator grows
-our $minfillwidth     = 5;      # Fill area must be at least this wide
-our $average_over     = 5;      # Number of time-remaining estimates to average
-our $minfillreps      = 2;      # Minimum size of a fill and fill cap indicator
-our $forupdatequantum = 0.01;   # Only update every 1% of elapsed distance
+my $maxwidth           = 79;  # Maximum width of display
+my $showwidth          = 40;  # How wide to make the indicator
+my $showstarttime      = 6;   # How long before showing time-remaining estimate
+my $showmaxtime        = 10;  # Don't start estimate if less than this to go
+my $whilerate          = 30;  # Controls the rate at which while indicator grows
+my $minfillwidth       = 5;   # Fill area must be at least this wide
+my $average_over       = 5;   # Number of time-remaining estimates to average
+my $minfillreps        = 2;   # Minimum size of a fill and fill cap indicator
+my $forupdatequantum   = 0.01;  # Only update every 1% of elapsed distance
 
+# Synonyms for asserts and requirements...
 my $require = qr/require|ensure|assert|insist/;
 my $check   = qr/check|verify|confirm/;
 
-my $hws = qr/[^\S\n]/;
+# Horizontal whitespace...
+my $hws     = qr/[^\S\n]/;
 
+# Implement comments-to-code source filter...
 FILTER {
     shift;
-s{ ^ $hws* ( for(?:each)? \s* (?:my)? \s* (?:\$ [^\W\d]\w*)? \s* ) \( ([^;\n]*?) \) \s* \{
-            [ \t]* \#{3} \s (.*) \s* $
+    my $intro = qr/#{3,}/;
+    if (my @unknowns = grep {!/$intro/} @_) {
+        croak "Incomprehensible arguments: @unknowns\n",
+              "in call to 'use Smart::Comments'";
+    }
+    elsif (@_) {
+        $intro = '(?-x:'.join('|',@_).')(?!\#)';
+    }
+
+    # Progress bar on a for loop...
+    s{ ^ $hws* ( (?: [^\W\d]\w*: \s*)? for(?:each)? \s* (?:my)? \s* (?:\$ [^\W\d]\w*)? \s* ) \( ([^;\n]*?) \) \s* \{
+            [ \t]* $intro \s (.*) \s* $
      }
-     { decode_for($1, $2, $3) }xgem;
+     { _decode_for($1, $2, $3) }xgem;
 
-    s{ ^ $hws* ( (?:while|until) \s* \( .*? \) \s* ) \{
-            [ \t]* \#{3} \s (.*) \s* $
+    # Progress bar on a while loop...
+    s{ ^ $hws* ( (?: [^\W\d]\w*: \s*)? (?:while|until) \s* \( .*? \) \s* ) \{
+            [ \t]* $intro \s (.*) \s* $
      }
-     { decode_while($1, $2) }xgem;
+     { _decode_while($1, $2) }xgem;
 
-    s{ ^ $hws* ( for \s* \( .*? ; .*? ; .*? \) \s* ) \{
-            [ \t]* \#{3} \s (.*) \s* $
+    # Progress bar on a C-style for loop...
+    s{ ^ $hws* ( (?: [^\W\d]\w*: \s*)? for \s* \( .*? ; .*? ; .*? \) \s* ) \{
+            [ \t]* $intro \s (.*) \s* $
      }
-     { decode_while($1, $2) }xgem;
+     { _decode_while($1, $2) }xgem;
 
-    s{ ^ $hws* \#{3} [ \t] $require : \s* (.*) $ }
-     { decode_assert($1,"fatal") }gemx;
+    # Requirements...
+    s{ ^ $hws* $intro [ \t] $require : \s* (.*) $ }
+     { _decode_assert($1,"fatal") }gemx;
 
-    s{ ^ $hws* \#{3} [ \t] $check : \s* (.*) $ }
-     { decode_assert($1) }gemx;
+    # Assertions...
+    s{ ^ $hws* $intro [ \t] $check : \s* (.*) $ }
+     { _decode_assert($1) }gemx;
 
-    s{ ^ $hws* \#{3} [ \t]+ (\$ [\w:]* \w) [ \t]* $ }
-     {Smart::Comments::Dump(pref=>q{$1:},var=>[$1]);}gmx;
+    # Any other smart comment is a simple dump.
+    # Dump a raw scalar (the varname is used as the label)...
+    s{ ^ $hws* $intro [ \t]+ (\$ [\w:]* \w) [ \t]* $ }
+     {Smart::Comments::_Dump(pref=>q{$1:},var=>[$1]);}gmx;
 
-    s{ ^ $hws* \#{3} [ \t] (.+ :) [ \t]* (\$ [\w:]* \w) [ \t]* $ }
-     {Smart::Comments::Dump(pref=>q{$1},var=>[$2]);}gmx;
+    # Dump a labelled scalar...
+    s{ ^ $hws* $intro [ \t] (.+ :) [ \t]* (\$ [\w:]* \w) [ \t]* $ }
+     {Smart::Comments::_Dump(pref=>q{$1},var=>[$2]);}gmx;
 
-    s{ ^ $hws* \#{3} [ \t]+ ([\@%] [\w:]* \w) [ \t]* $ }
-     {Smart::Comments::Dump(pref=>q{$1:},var=>[\\$1]);}gmx;
+    # Dump a raw hash or array (the varname is used as the label)...
+    s{ ^ $hws* $intro [ \t]+ ([\@%] [\w:]* \w) [ \t]* $ }
+     {Smart::Comments::_Dump(pref=>q{$1:},var=>[\\$1]);}gmx;
 
-    s{ ^ $hws* \#{3} [ \t]+ (.+ :) [ \t]* ([\@%] [\w:]* \w) [ \t]* $ }
-     {Smart::Comments::Dump(pref=>q{$1},var=>[\\$2]);}gmx;
+    # Dump a labelled hash or array...
+    s{ ^ $hws* $intro [ \t]+ (.+ :) [ \t]* ([\@%] [\w:]* \w) [ \t]* $ }
+     {Smart::Comments::_Dump(pref=>q{$1},var=>[\\$2]);}gmx;
 
-    s{ ^ $hws* \#{3} [ \t]+ (.+ :) (.+) }
-     {Smart::Comments::Dump(pref=>q{$1},var=>[$2]);}gmx;
+    # Dump a labelled expression...
+    s{ ^ $hws* $intro [ \t]+ (.+ :) (.+) }
+     {Smart::Comments::_Dump(pref=>q{$1},var=>[$2]);}gmx;
 
-    s{ ^ $hws* \#{3} [ \t]+ (\S.+) }
-     {Smart::Comments::Dump(pref=>q{$1:},var=>eval q{[$1]});}gmx;
+    # Dump an 'in progress' message
+    s{ ^ $hws* $intro (.+ [.]{3}) \s* $ }
+     {Smart::Comments::_Dump(pref=>qq{$1});}gmx;
 
-    s{ ^ $hws* \#{3} [ \t]+ $ }
+    # Dump an unlabelled expression (the expression is used as the label)...
+    s{ ^ $hws* $intro [ \t]+ (\S.+) }
+     {Smart::Comments::_Dump(pref=>q{$1:},var=>eval q{[$1]});}gmx;
+
+    # An empty comment dumps an empty line...
+    s{ ^ $hws* $intro [ \t]+ $ }
      {warn qq{\n};}gmx;
 };
 
-sub decode_assert {
+sub _uniq { my %seen; grep { !$seen{$_}++ } @_ }
+
+# Converts an assertion to the equivalent Perl code...
+sub _decode_assert {
     my ($assertion, $fatal) = @_;
+
+    # Choose the right signalling mechanism...
     $fatal = $fatal ? 'die "\n"' : 'warn "\n"';
-    my $dump = 'Smart::Comments::Dump';
+
+    my $dump = 'Smart::Comments::_Dump';
     use Text::Balanced qw(extract_variable extract_multiple);
-    my @vars = map {
-            /^$hws*[%\@]/
-          ? "$dump(pref=>q{    $_ was:},var=>[\\$_], nonl=>1);"
-          : "$dump(pref=>q{    $_ was:},var=>[$_],nonl=>1);"
-    } extract_multiple($assertion, [ \&extract_variable ], undef, 1);
-    return
-qq{unless($assertion){warn "\\n", '### $assertion was not true';@vars; $fatal}};
+
+    # Extract variables from assertion and enreference any arrays or hashes...
+    my @vars = map { /^$hws*[%\@]/ ? "$dump(pref=>q{    $_ was:},var=>[\\$_], nonl=>1);"
+                                   : "$dump(pref=>q{    $_ was:},var=>[$_],nonl=>1);"
+                   }
+                _uniq extract_multiple($assertion, [\&extract_variable], undef, 1);
+
+    # Generate the test-and-report code...
+    return qq{unless($assertion){warn "\\n", '### $assertion was not true';@vars; $fatal}};
 }
 
-my $counter = 0;
-
-sub decode_for {
+# Generate progress-bar code for a Perlish for loop...
+my $ID = 0;
+sub _decode_for {
     my ($for, $range, $mesg) = @_;
-    $counter++;
-    return
-      "my \$not_first__$counter;$for (my \@SmartComments__range__$counter =
-    $range ) { Smart::Comments::for_progress(qq{$mesg}, \$not_first__$counter, \\\@SmartComments__range__$counter);";
+
+    # Give the loop a unique ID...
+    $ID++;
+
+    # Rewrite the loop with a progress bar as its first statement...
+    return "my \$not_first__$ID;$for (my \@SmartComments__range__$ID = $range) { Smart::Comments::_for_progress(qq{$mesg}, \$not_first__$ID, \\\@SmartComments__range__$ID);";
 }
 
-sub decode_while {
+# Generate progress-bar code for a Perlish while loop...
+sub _decode_while {
     my ($while, $mesg) = @_;
-    $counter++;
-    return
-"my \$not_first__$counter;$while { Smart::Comments::while_progress(qq{$mesg}, \\\$not_first__$counter);";
+
+    # Give the loop a unique ID...
+    $ID++;
+
+    # Rewrite the loop with a progress bar as its first statement...
+    return "my \$not_first__$ID;$while { Smart::Comments::_while_progress(qq{$mesg}, \\\$not_first__$ID);";
 }
 
-sub desc_time {
+# Generate approximate time descriptions...
+sub _desc_time {
     my ($seconds) = @_;
-    my $hours = int($seconds / 3600);
-    $seconds -= 3600 * $hours;
-    my $minutes = int($seconds / 60);
-    $seconds -= 60 * $minutes;
+    my $hours = int($seconds/3600);    $seconds -= 3600*$hours;
+    my $minutes = int($seconds/60);    $seconds -= 60*$minutes;
     my $remaining;
+
+    # Describe hours to the nearest half-hour (and say how close to it)...
     if ($hours) {
         $remaining =
-          $minutes < 5
-          ? "about $hours hour" . ($hours == 1 ? "" : "s")
-          : $minutes < 25 ? "less than $hours.5 hours"
-          : $minutes < 35 ? "about $hours.5 hours"
-          : $minutes < 55 ? "less than " . ($hours + 1) . " hours"
-          : "about " . ($hours + 1) . " hours";
+          $minutes < 5   ? "about $hours hour".($hours==1?"":"s")
+        : $minutes < 25  ? "less than $hours.5 hours"
+        : $minutes < 35  ? "about $hours.5 hours"
+        : $minutes < 55  ? "less than ".($hours+1)." hours"
+        :                  "about ".($hours+1)." hours";
     }
+    # Describe minutes to the nearest minute
     elsif ($minutes) {
         $remaining = "about $minutes minutes";
         chop $remaining if $minutes == 1;
     }
-    elsif ($seconds > 10) {
-        $seconds   = int(($seconds + 5) / 10);
+    # Describe tens of seconds to the nearest ten seconds...
+    elsif ($seconds > 10) { 
+        $seconds = int(($seconds+5)/10);
         $remaining = "about ${seconds}0 seconds";
     }
-    else {
+    # Never be more accurate than ten seconds...
+    else {  
         $remaining = "less than 10 seconds";
     }
     return $remaining;
 }
 
+# Update the moving average of a series given the newest measurement...
 my %started;
 my %moving;
-
-sub moving_average {
+sub _moving_average {
     my ($context, $next) = @_;
     my $moving = $moving{$context} ||= [];
     push @$moving, $next;
     if (@$moving >= $average_over) {
-        splice @$moving, 0, $#$moving - $average_over;
+        splice @$moving, 0, $#$moving-$average_over;
     }
-    return sum(@$moving) / @$moving;
+    return sum(@$moving)/@$moving;
 }
 
-our @progress_pats = (
-    ### left     fill                     leader                  right
-    qr{^(\s*.*?) (?>(\S)\2{$minfillreps,}) (\S+)\s{$minfillreps,} (\S.+)}x,
-    qr{^(\s*.*?) (?>(\S)\2{$minfillreps,}) ()   \s{$minfillreps,} (\S.+)}x,
-    qr{^(\s*.*?) (?>(\S)\2{$minfillreps,}) (\S*)                  (?=\s*$)}x,
-    qr{^(\s*.*?) ()                        ()                     () \s*$ }x,
+# Recognize progress bars...
+my @progress_pats = (
+   #    left     extending                 end marker of bar      right
+   #    anchor   bar ("fill")               |    gap after bar    anchor
+   #    ======   =======================   === =================  ====
+   qr{^(\s*.*?) (?>(\S)\2{$minfillreps,}) (\S+)\s{$minfillreps,} (\S.*)}x,
+   qr{^(\s*.*?) (?>(\S)\2{$minfillreps,}) ()   \s{$minfillreps,} (\S.*)}x,
+   qr{^(\s*.*?) (?>(\S)\2{$minfillreps,}) (\S*)                  (?=\s*$)}x,
+   qr{^(\s*.*?) ()                        ()                     () \s*$ }x,
 );
 
-sub prog_pat {
+# Clean up components of progress bar (inserting defaults)...
+sub _prog_pat {
     for my $pat (@progress_pats) {
         $_[0] =~ $pat or next;
-        return ($1, $2 || "", $3 || "", $4 || "");
+        return ($1,$2||"",$3||"",$4||""); 
     }
     return;
 }
 
-my (%count, %max, %last_elapsed, %last_fraction, %showing);
+# State information for various progress bars...
+my (%count, %max, %prev_elapsed, %prev_fraction, %showing);
 
-sub for_progress {
+# Animate the progress bar of a for loop...
+sub _for_progress {
     my ($mesg, $not_first, $data) = @_;
     my ($at, $max, $elapsed, $remaining, $fraction);
+
+    # Update progress bar...
     if ($not_first) {
-        $at       = ++$count{$data};
-        $max      = $max{$data};
-        $elapsed  = time - $started{$data};
-        $fraction = $max > 0 ? $at / $max : 1;
-        my $motion = $fraction - $last_fraction{$data};
-        return
-          unless $not_first < 0 || $at == $max || $motion > $forupdatequantum;
-        $remaining =
-          moving_average $data, $fraction
-          ? $elapsed / $fraction - $elapsed
-          : 0;
+        # One more iteration towards the maximum...
+        $at = ++$count{$data};
+        $max = $max{$data};
+
+        # How long now (both absolute and relative)...
+        $elapsed = time - $started{$data};
+        $fraction = $max>0 ? $at/$max : 1;
+
+        # How much change occurred...
+        my $motion = $fraction - $prev_fraction{$data};
+
+        # Don't update if count wrapped (unlikely) or if finished
+        # or if no visible change...
+        return unless $not_first < 0
+                   || $at == $max
+                   || $motion > $forupdatequantum;
+
+        # Guestimate how long still to go...
+        $remaining = _moving_average $data,
+                                    $fraction ? $elapsed/$fraction-$elapsed
+                                              : 0;
     }
+    # If first iteration...
     else {
-        $at  = $count{$data} = 0;
-        $max = $max{$data}   = $#$data;
+        # Start at the beginning...
+        $at = $count{$data} = 0;
+
+        # Work out where the end will be...
+        $max = $max{$data} = $#$data;
+
+        # Start the clock...
         $started{$data} = time;
-        $elapsed        = 0;
-        $fraction       = 0;
-        $_[1]           = 1;      # $not_first
+        $elapsed = 0;
+        $fraction = 0;
+
+        # After which, it will no longer be the first iteration.
+        $_[1] = 1;  # $not_first
     }
-    $last_fraction{$data} = $fraction;
 
-    if (my ($left, $fill, $leader, $right) = prog_pat($mesg)) {
+    # Remember the previous increment fraction...
+    $prev_fraction{$data} = $fraction;
+
+    # Now draw the progress bar (if it's a valid one)...
+    if (my ($left, $fill, $leader, $right) = _prog_pat($mesg)) {
+        # Insert the percentage progress in place of a '%'...
         s/%/int(100*$fraction).'%'/ge for ($left, $leader, $right);
-        my $fillwidth = $showwidth - length($left) - length($right);
-        $fillwidth = $minfillwidth if $fillwidth < $minfillwidth;
-        my $leaderwidth = length($leader);
-        print STDERR "\r", " " x $maxwidth, "\r", $left,
-          sprintf("%-${fillwidth}s",
-              $at == $max
-            ? $fill x $fillwidth
-            : $fill x ($fillwidth * $fraction - $leaderwidth) . $leader),
-          $right;
 
-        if (   $elapsed >= $showstarttime
-            && $at < $max
-            && ($showing{$data} || $remaining && $remaining >= $showmaxtime))
-        {
-            print STDERR "  (", desc_time($remaining), " remaining)";
+        # Work out how much space is available for the bar itself...
+        my $fillwidth = $showwidth - length($left) - length($right);
+
+        # But no less than the prespecified minimum please...
+        $fillwidth = $minfillwidth if $fillwidth < $minfillwidth;
+
+        # How big is the end of the bar...
+        my $leaderwidth = length($leader);
+
+        # Now draw the bar, using carriage returns to overwrite it...
+        print STDERR "\r", " "x$maxwidth,
+                     "\r", $left,
+                     sprintf("%-${fillwidth}s",
+                               $at==$max ? $fill x $fillwidth :
+                               $fill x ($fillwidth*$fraction-$leaderwidth)
+                             . $leader),
+                     $right;
+
+        # Work out whether to show an ETA estimate...
+        if ($elapsed >= $showstarttime &&
+            $at < $max &&
+            ($showing{$data} || $remaining && $remaining >= $showmaxtime)
+        ) {
+            print STDERR "  (", _desc_time($remaining), " remaining)";
             $showing{$data} = 1;
         }
+
+        # Close off the line, if we're finished...
         print STDERR "\n" if $at >= $max;
     }
 }
 
 my %shown;
-my $last_length = -1;
+my $prev_length = -1;
 
-sub while_progress {
+# Animate the progress bar of a while loop...
+sub _while_progress {
     my ($mesg, $not_first_ref) = @_;
     my $at;
+
+    # If we've looped this one before, recover the current iteration count...
     if ($$not_first_ref) {
         $at = ++$count{$not_first_ref};
     }
+    # Otherwise set the iteration count to zero...
     else {
         $at = $count{$not_first_ref} = 0;
         $$not_first_ref = 1;
     }
 
-    if (my ($left, $fill, $leader, $right) = prog_pat($mesg)) {
+    # Extract the components of the progress bar...
+    if (my ($left, $fill, $leader, $right) = _prog_pat($mesg)) {
+        # Replace any '%' with the current iteration count...
         s/%/$at/ge for ($left, $leader, $right);
+
+        # How much space is there for the progress bar?
         my $fillwidth = $showwidth - length($left) - length($right);
+
+        # Make it at least the prespecified minimum amount...
         $fillwidth = $minfillwidth if $fillwidth < $minfillwidth;
+
+        # How big is the end of the bar?
         my $leaderwidth = length($leader);
-        my $length      =
-          int(($fillwidth - $leaderwidth) *
-              (1 - $whilerate / ($whilerate + $at)));
-        return if $last_length == $length;
-        $last_length = $length;
-        print STDERR "\r", " " x $maxwidth, "\r", $left,
-          sprintf("%-${fillwidth}s", $fill x $length . $leader), $right;
+
+        # How big does that make the bar itself (use reciprocal growth)...
+        my $length = int(($fillwidth-$leaderwidth)
+                           *(1-$whilerate/($whilerate+$at)));
+
+        # Don't update if the picture would look the same...
+        return if $prev_length == $length;
+
+        # Otherwise, remember where we got to...
+        $prev_length = $length;
+
+        # And print the bar...
+        print STDERR "\r", " "x$maxwidth,
+                     "\r", $left,
+                     sprintf("%-${fillwidth}s", $fill x $length . $leader),
+                     $right;
     }
 }
 
-sub Assert {
-    my %arg = @_;
-    return unless $arg{pass};
-}
+# Vestigal (I think)...
+#sub Assert {
+#   my %arg = @_;
+#   return unless $arg{pass}
+#}
 
 use Data::Dumper 'Dumper';
 
-sub Dump {
+# Dump a variable and then reformat the resulting string more prettily...
+sub _Dump {
     my %args = @_;
     my ($pref, $varref, $nonl) = @args{qw(pref var nonl)};
+
+    # Add a newline?
     my $nl = $nonl ? "" : "\n";
+
+    # Handle a prefix with no actual variable...
     if ($pref && !defined $varref) {
         $pref =~ s/:$//;
         warn "$nl### $pref\n";
         return;
     }
+
+    # Set Data::Dumper up for a tidy dump and do the dump...
     local $Data::Dumper::Quotekeys = 0;
     local $Data::Dumper::Sortkeys  = 1;
     local $Data::Dumper::Indent    = 2;
     my $dumped = Dumper $varref;
+
+    # Clean up the results...
     $dumped =~ s/\$VAR1 = \[\n//;
     $dumped =~ s/\s*\];\s*$//;
-    $dumped =~ s/^(\s*)//;
-    my $indent = length $1;
-    my $outdent = " " x (length($pref) + 1);
+    $dumped =~ s/\A(\s*)//;
+
+    # How much to shave off and put back on each line...
+    my $indent  = length $1;
+    my $outdent = " " x (length($pref) + 4);
+
+    # Report "inside-out" and "flyweight" objects more cleanly...
+    $dumped =~ s{bless[(] do[{]\\[(]my \$o = undef[)][}], '([^']+)' [)]}
+                {<Opaque $1 object (blessed scalar)>}g;
+
+    # Adjust the indents...
     $dumped =~ s/^[ ]{$indent}([ ]*)/### $outdent$1/gm;
+
+    # Print the message...
     warn "$nl### $pref $dumped\n$nl";
 }
 
-1;
+1; # Magic true value required at end of module
 __END__
 
 =head1 NAME
 
-Smart::Comments - Comments that come to life
+Smart::Comments - Comments that do more than just sit there
+
 
 =head1 VERSION
 
-This document describes version 0.01 of Smart::Comments, released
-September 28, 2004.
+This document describes Smart::Comments version 0.0.2
+
 
 =head1 SYNOPSIS
 
     use Smart::Comments;
-    my $x = 1; my $y = 2;
-    sub is_odd { $_[0] % 2 }
 
-    ### require: $x > $y
-    ### require: is_odd($y)
+    my $var = suspect_value();
 
-    for (my $j=500; $j>0; $j--) {   ### Compiling===[%]  done
-        select undef, undef, undef, 0.01;
+    ### $var
+
+    ### got: $var
+
+    ### Now computing value...
+
+    # and when looping:
+
+    for my $big_num (@big_nums) {  ### Factoring...      done
+        factor($big_num);
     }
 
+    while ($error > $tolerance) {  ### Refining--->      done
+        refine_approximation()
+    }
+
+    for (my $i=0; $i<$MAX_INT; $i++) {   ### Working===[%]     done
+        do_something_expensive_with($i);
+    }
+
+  
 =head1 DESCRIPTION
 
-This module filters your source code, turning any comments beginning with
-C<###> into code that interacts with the rest of the program.
+Smart comments provide an easy way to insert debugging and tracking code
+into a program. They can report the value of a variable, track the
+progress of a loop, and verify that particular assertions are true.
 
-To remove this effect, simple remove the C<use Smart::Comments> line, and
-the original code will run with no speed penalty at all.  You may also turn
-off the filtering lexically, using C<no Smart::Comments>.
+Best of all, when you're finished debugging, you don't have to remove them.
+Simply commenting out the C<use Smart::Comments> line turns them back into
+regular comments. Leaving smart comments in your code is smart because if you
+needed them once, you'll almost certainly need them again later.
 
-Here are some more examples of how this module works:
 
-    while (<>) {                    ### Loading $_
-        sleep 1;
+=head1 INTERFACE 
+
+All smart comments start with three (or more) C<#> characters. That is,
+they are regular C<#>-introduced comments whose first two (or more)
+characters are also C<#>'s.
+
+=head2 Using the Module
+
+The module is loaded like any other:
+
+    use Smart::Comments;
+
+When loaded it filters the remaining code up to the next:
+
+    no Smart::Comments;
+
+directive, replacing any smart comments with smart code that implements the
+comments behaviour.
+
+You can also specify particular levels of smartness, by including one or more
+markers as arguments to the C<use>:
+
+    use Smart::Comments '###', '####';
+
+These arguments tell the module to filter only those comments that start with
+the same number of C<#>'s. So the above C<use> statement would "activate" any
+smart comments of the form:
+
+    ###   Smart...
+
+    ####  Smarter...
+
+but not those of the form:
+
+    ##### Smartest...
+
+This facility is useful for differentiating progress bars (see
+L<Progress Bars>), which should always be active, from debugging
+comments (see L<Debugging via Comments>), which should not:
+
+    #### Debugging here...
+
+    for (@values) {         ### Progress: 0...  100
+        do_stuff();
     }
 
-    my $i = 10;
-    while ($i-- > 0) {              ### Preparing----->
-        sleep 1;
+Note that, for simplicity, all smart comments described below will be
+written with three C<#>'s; in all such cases, any number of C<#>'s
+greater than three could be used instead.
+
+
+=head2 Debugging via Comments
+
+The simplest way to use smart comments is for debugging. The module
+supports the following forms, all of which print to C<STDERR>:
+
+=over
+
+=item C<< ### LABEL : EXPRESSION >>
+
+The LABEL is any sequence of characters up to the first colon. 
+The EXPRESSION is any valid Perl expression, including a simple variable.
+When active, the comment prints the label, followed by the value of the
+expression. For example:
+
+    ### Expected: 2 * $prediction
+    ###      Got: $result
+
+prints:
+
+    ### Expected: 42
+    ###      Got: 13
+
+
+=item C<< ### EXPRESSION >>
+
+The EXPRESSION is any valid Perl expression, including a simple
+variable. When active, the comment prints the expression, followed by
+the value of the expression. For example:
+
+    ### 2 * $prediction
+    ### $result
+
+prints:
+
+    ### 2 * $prediction: 42
+    ### $result: 13
+
+
+=item C<< ### TEXT... >>
+
+The TEXT is any sequence of characters that end in three dots.
+When active, the comment just prints the text, including the dots. For
+example:
+
+    ### Acquiring data...
+
+    $data = get_data();
+
+    ### Verifying data...
+
+    verify_data($data);
+
+    ### Assimilating data...
+
+    assimilate_data($data);
+
+    ### Tired now, having a little lie down...
+
+    sleep 900;
+
+would print:
+
+
+    ### Acquiring data...
+
+    ### Verifying data...
+
+    ### Assimilating data...
+
+    ### Tired now, having a little lie down...
+
+as each phase commenced. This is particularly useful for tracking down
+precisely where a bug is occurring. It is also useful in non-debugging
+situations, especially when batch processing, as a simple progress
+feedback mechanism.
+
+=back
+
+=head2 Checks and Assertions via Comments
+
+=over
+
+=item C<< ### require: BOOLEAN_EXPR >>
+
+=item C<< ### assert:  BOOLEAN_EXPR >>
+
+=item C<< ### ensure:  BOOLEAN_EXPR >>
+
+=item C<< ### insist:  BOOLEAN_EXPR >>
+
+These four are synonyms for the same behaviour. The comment evaluates
+the expression in a boolean context. If the result is true, nothing more
+is done. If the result is false, the comment throws an exception listing
+the expression, the fact that it failed, and the values of any variables
+used in the expression.
+
+For example, given the following assertion:
+
+    ### require: $min < $result && $result < $max
+
+if the expression evaluated false, the comment would die with the following
+message:
+ 
+    ### $min < $result && $result < $max was not true at demo.pl line 86.
+    ###     $min was: 7
+    ###     $result was: 1000004
+    ###     $max was: 99
+
+
+=item C<< ### check:   BOOLEAN_EXPR >>
+
+=item C<< ### confirm: BOOLEAN_EXPR >>
+
+=item C<< ### verify:  BOOLEAN_EXPR >>
+
+These three are synonyms for the same behaviour. The comment evaluates
+the expression in a boolean context. If the result is true, nothing more
+is done. If the result is false, the comment prints a warning message
+listing the expression, the fact that it failed, and the values of any
+variables used in the expression.
+
+The effect is identical to that of the four assertions listed earlier, except
+that C<warn> is used instead of C<die>.
+
+=back
+
+=head2 Progress Bars
+
+You can put a smart comment on the same line as any of the following
+types of Perl loop:
+
+    foreach my VAR ( LIST ) {       ### Progressing...   done
+
+    for my VAR ( LIST ) {           ### Progressing...   done
+
+    foreach ( LIST ) {              ### Progressing...   done
+
+    for ( LIST ) {                  ### Progressing...   done
+
+    while (CONDITION) {             ### Progressing...   done
+
+    until (CONDITION) {             ### Progressing...   done
+
+    for (INIT; CONDITION; INCR) {   ### Progressing...   done
+
+
+In each case, the module animates the comment, causing the dots to
+extend from the left text, reaching the right text on the last
+iteration. For "open ended" loops (like C<while> and C-style C<for>
+loops), the dots will never reach the right text and their progress
+slows down as the number of iterations increases.
+
+For example, a smart comment like:
+
+    for (@candidates) {       ### Evaluating...     done
+
+would be animated is the following sequence (which would appear
+sequentially on a single line, rather than on consecutive lines):
+
+    Evaluating                          done
+
+    Evaluating......                    done
+
+    Evaluating.............             done
+
+    Evaluating...................       done
+
+    Evaluating..........................done
+
+The module animates the first sequence of two identical characters in
+the comment, provided those characters are followed by a gap of at least
+two whitespace characters. So you can specify different types of
+progress bars. For example:
+
+    for (@candidates) {       ### Evaluating:::     done
+
+or:
+
+    for (@candidates) {       ### Evaluating===     done
+
+or:
+
+    for (@candidates) {       ### Evaluating|||     done
+
+If the characters to be animated are immediately followed by other
+non-whitespace characters before the gap, then those other non-whitespace
+characters are used as an "arrow head" or "leader" and are pushed right
+by the growing progress bar. For example:
+
+    for (@candidates) {       ### Evaluating===|    done
+
+would animate like so:
+
+    Evaluating|                         done
+
+    Evaluating=====|                    done
+
+    Evaluating============|             done
+
+    Evaluating==================|       done
+
+    Evaluating==========================done
+
+If a percentage character (C<%>) appears anywhere in the comment, it is
+replaced by the percentage completion. For example:
+
+    for (@candidates) {       ### Evaluating [===|    ] % done
+
+animates like so:
+
+    Evaluating [|                ]   0% done
+
+    Evaluating [===|             ]  25% done
+
+    Evaluating [========|        ]  50% done
+
+    Evaluating [============|    ]  75% done
+
+    Evaluating [=================] 100% done
+
+If the C<%> is in the "arrow head" it moves with the progress bar. For
+example:
+
+    for (@candidates) {       ### Evaluating |===[%]    |
+
+would be aninated like so:
+
+    Evaluating |[0%]                       |
+
+    Evaluating |=[25%]                     |
+
+    Evaluating |========[50%]              |
+
+    Evaluating |===============[75%]       |
+
+    Evaluating |===========================|
+
+For "open-ended" loops, the percentage completion is unknown, so the module
+replaces each C<%> with the current iteration count. For example:
+
+    while ($next ne $target) {       ### Evaluating |===[%]    |
+
+would animate like so:
+
+    Evaluating |[0]                        |
+
+    Evaluating |=[2]                       |
+
+    Evaluating |==[3]                      |
+
+    Evaluating |===[5]                     |
+
+    Evaluating |====[7]                    |
+
+    Evaluating |=====[8]                   |
+
+    Evaluating |======[11]                 |
+
+Note that the non-sequential numbering in the above example is a result
+of the "hurry up and slow down" algorithm that prevents open-ended
+loops from ever reaching the right-hand side.
+
+Finally, progress bars don't have to have an animated component. They
+can just report the loop's progress numerically:
+
+    for (@candidates) {       ### Evaluating (% done)
+
+which would animate (all of the same line):
+
+    Evaluating (0% done)
+
+    Evaluating (25% done)
+
+    Evaluating (50% done)
+
+    Evaluating (75% done)
+
+    Evaluating (100% done)
+
+
+=head2 Time-Remaining Estimates
+
+When a progress bar is used with a C<for> loop, the module tracks how long
+each iteration is taking and makes an estimate of how much time will be
+required to complete the entire loop.
+
+Normally this estimate is not shown, unless the estimate becomes large
+enough to warrant informing the user. Specifically, the estimate will
+be shown if, after five seconds, the time remaining exceeds ten seconds.
+In other words, a time-remaining estimate is shown if the module
+detects a C<for> loop that is likely to take more than 15 seconds in
+total. For example:
+
+    for (@seven_samurai) {      ### Fighting: [|||    ]
+        fight();
+        sleep 5;
     }
-    ### i now: $i
 
-    for my $j (1..500) {            ### Compiling===[%]  done
-        select undef, undef, undef, 0.01;
-    }
+would be animated like so:
 
-    %foo = ( a=>{foo=>'bar'}, b=>[1..5] );
-    ### %foo
+    Fighting: [                           ]
 
-    for (1..25) {                   ### Loading...  done
-        sleep 1;
-    }
+    Fighting: [||||                       ]
 
-    ### check: keys(%foo) == 2
-    ### require: keys(%foo) == 3
+    Fighting: [|||||||||                  ]  (about 20 seconds remaining)
 
-=head1 CAVEATS
+    Fighting: [||||||||||||||             ]  (about 20 seconds remaining)
 
-Currently, there are no meaningful tests and documentation for this module.
-Contributions will be very much appreciated.
+    Fighting: [||||||||||||||||||         ]  (about 10 seconds remaining)
 
-=head1 TODO
+    Fighting: [|||||||||||||||||||||||    ]  (less than 10 seconds remaining)
 
-Fix line numbering problem (i.e. last message in the example above).
+    Fighting: [|||||||||||||||||||||||||||]
 
-Add line numbers to non-progress-bar reports.
+The precision of the reported time-remaining estimate is deliberately vague,
+mainly to prevent it being annoyingly wrong.
+
+
+=head1 DIAGNOSTICS
+
+In a sense, everything this module does is a diagnostic. All comments that
+print anything, print it to C<STDERR>.
+
+However, the module itself has only one diagnostic:
+
+=over
+
+=item C<< Incomprehensible arguments: %s in call to 'use Smart::Comments >>
+
+You loaded the module and passed it an argument that wasn't three-or-
+more C<#>'s. Arguments like C<'###'>, C<'####'>, C<'#####'>, etc. are
+the only ones that the module accepts.
+
+=back
+
+=head1 CONFIGURATION AND ENVIRONMENT
+
+Smart::Comments requires no configuration files or environment variables.
+
+
+=head1 DEPENDENCIES
+
+The module requires the following modules:
+
+=over
+
+=item *
+
+Filter::Simple
+
+=item *
+
+version.pm
+
+=item *
+
+List::Util
+
+=item *
+
+Data::Dumper
+
+=item *
+
+Text::Balanced
+
+=back
+
+=head1 INCOMPATIBILITIES
+
+None reported. This module is probably even relatively safe with other
+Filter::Simple modules since it is very specific and limited in what
+it filters.
+
+
+=head1 BUGS AND LIMITATIONS
+
+No bugs have been reported.
+
+This module has the usual limitations of source filters (i.e. it looks
+smarter than it is).
+
+Please report any bugs or feature requests to
+C<bug-smart-comments@rt.cpan.org>, or through the web interface at
+L<http://rt.cpan.org>.
+
 
 =head1 AUTHOR
 
-Damian Conway (damian@conway.org)
+Damian Conway  C<< <DCONWAY@cpan.org> >>
 
-=head1 MAINTAINERS
 
-Autrijus Tang E<lt>autrijus@autrijus.orgE<gt>,
-Brian Ingerson E<lt>INGY@cpan.orgE<gt>.
+=head1 LICENCE AND COPYRIGHT
 
-=head1 COPYRIGHT
+Copyright (c) 2005, Damian Conway C<< <DCONWAY@cpan.org> >>. All rights reserved.
 
-   Copyright (c) 2004, Damian Conway. All Rights Reserved.
- This module is free software. It may be used, redistributed
-     and/or modified under the same terms as Perl itself.
+This module is free software; you can redistribute it and/or
+modify it under the same terms as Perl itself.
+
+
+=head1 DISCLAIMER OF WARRANTY
+
+BECAUSE THIS SOFTWARE IS LICENSED FREE OF CHARGE, THERE IS NO WARRANTY
+FOR THE SOFTWARE, TO THE EXTENT PERMITTED BY APPLICABLE LAW. EXCEPT WHEN
+OTHERWISE STATED IN WRITING THE COPYRIGHT HOLDERS AND/OR OTHER PARTIES
+PROVIDE THE SOFTWARE "AS IS" WITHOUT WARRANTY OF ANY KIND, EITHER
+EXPRESSED OR IMPLIED, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE. THE
+ENTIRE RISK AS TO THE QUALITY AND PERFORMANCE OF THE SOFTWARE IS WITH
+YOU. SHOULD THE SOFTWARE PROVE DEFECTIVE, YOU ASSUME THE COST OF ALL
+NECESSARY SERVICING, REPAIR, OR CORRECTION.
+
+IN NO EVENT UNLESS REQUIRED BY APPLICABLE LAW OR AGREED TO IN WRITING
+WILL ANY COPYRIGHT HOLDER, OR ANY OTHER PARTY WHO MAY MODIFY AND/OR
+REDISTRIBUTE THE SOFTWARE AS PERMITTED BY THE ABOVE LICENCE, BE
+LIABLE TO YOU FOR DAMAGES, INCLUDING ANY GENERAL, SPECIAL, INCIDENTAL,
+OR CONSEQUENTIAL DAMAGES ARISING OUT OF THE USE OR INABILITY TO USE
+THE SOFTWARE (INCLUDING BUT NOT LIMITED TO LOSS OF DATA OR DATA BEING
+RENDERED INACCURATE OR LOSSES SUSTAINED BY YOU OR THIRD PARTIES OR A
+FAILURE OF THE SOFTWARE TO OPERATE WITH ANY OTHER SOFTWARE), EVEN IF
+SUCH HOLDER OR OTHER PARTY HAS BEEN ADVISED OF THE POSSIBILITY OF
+SUCH DAMAGES.

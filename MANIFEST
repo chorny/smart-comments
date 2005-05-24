@@ -1,17 +1,27 @@
-inc/Module/Install.pm
-inc/Module/Install/Base.pm
-inc/Module/Install/Can.pm
-inc/Module/Install/Fetch.pm
-inc/Module/Install/Include.pm
-inc/Module/Install/Makefile.pm
-inc/Module/Install/Metadata.pm
-inc/Module/Install/Win32.pm
-inc/Module/Install/WriteAll.pm
-inc/Test/Builder.pm
-inc/Test/More.pm
-lib/Smart/Comments.pm
+Build.PL
+Changes
+MANIFEST
+META.yml # Will be created by "make dist"
 Makefile.PL
-MANIFEST			This list of files
-META.yml
-t/1-basic.t
-SIGNATURE                                Public-key signature (added by MakeMaker)
+README
+lib/Smart/Comments.pm
+t/00.load.t
+t/pod-coverage.t
+t/pod.t
+t/assert.t
+t/c_like_for_loop.t
+t/check.t
+t/confirm.t
+t/ensure.t
+t/insist.t
+t/labelled_perlish_loop.t
+t/message.t
+t/perlish_for.t
+t/perlish_for_percentage.t
+t/require.t
+t/selective.t
+t/simple_perlish_for.t
+t/var.t
+t/verify.t
+t/while.t
+t/while_num.t

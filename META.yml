@@ -1,16 +1,16 @@
-name: Smart-Comments
-version: 0.01
-abstract: Comments that come to life
-author: Damian Conway <damian@conway.org>
-license: perl
-distribution_type: module
-build_requires:
-  Test::More: 0
+# http://module-build.sourceforge.net/META-spec.html
+#XXXXXXX This is a prototype!!!  It will change in the future!!! XXXXX#
+name:         Smart-Comments
+version:      0.0.2
+version_from: lib/Smart/Comments.pm
+installdirs:  site
 requires:
-  perl: 5.6.0
-  List::Util: 0
-  Filter::Simple: 0
-no_index:
-  directory:
-    - inc
-generated_by: Module::Install version 0.35
+    Data::Dumper:                  0
+    Filter::Simple:                0
+    List::Util:                    0
+    Test::More:                    0
+    Text::Balanced:                0
+    version:                       0
+
+distribution_type: module
+generated_by: ExtUtils::MakeMaker version 6.17
