@@ -1,7 +1,7 @@
 # http://module-build.sourceforge.net/META-spec.html
 #XXXXXXX This is a prototype!!!  It will change in the future!!! XXXXX#
 name:         Smart-Comments
-version:      0.0.3
+version:      1.0.1
 version_from: lib/Smart/Comments.pm
 installdirs:  site
 requires:

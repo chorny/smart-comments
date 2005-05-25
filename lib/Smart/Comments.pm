@@ -1,6 +1,6 @@
 package Smart::Comments;
 
-use version; $VERSION = qv('0.0.3');
+use version; $VERSION = qv('1.0.1');
 
 use warnings;
 use strict;
@@ -408,7 +408,7 @@ Smart::Comments - Comments that do more than just sit there
 
 =head1 VERSION
 
-This document describes Smart::Comments version 0.0.3
+This document describes Smart::Comments version 1.0.1
 
 
 =head1 SYNOPSIS
