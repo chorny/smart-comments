@@ -9,7 +9,7 @@ my $count = 0;
 
 LABEL:
 
-while ($count < 3) {    ### Simple while loop:===|   done
+while ($count < 100) {    ### Simple while loop:===|   done
     $count++;
 }
 

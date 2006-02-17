@@ -9,7 +9,7 @@ my $count = 0;
 
 LABEL:
 
-for (my $count=0;$count < 3;$count++) {    ### C-like for loop:===|   done
+for (my $count=0;$count < 100;$count++) {    ### C-like for loop:===|   done
     # nothing
 }
 

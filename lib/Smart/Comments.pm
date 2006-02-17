@@ -1,6 +1,6 @@
 package Smart::Comments;
 
-use version; $VERSION = qv('1.0.1');
+use version; $VERSION = qv('1.0.2');
 
 use warnings;
 use strict;
@@ -10,8 +10,8 @@ use List::Util qw(sum);
 
 use Filter::Simple;
 
-my $maxwidth           = 79;  # Maximum width of display
-my $showwidth          = 40;  # How wide to make the indicator
+my $maxwidth           = 69;  # Maximum width of display
+my $showwidth          = 35;  # How wide to make the indicator
 my $showstarttime      = 6;   # How long before showing time-remaining estimate
 my $showmaxtime        = 10;  # Don't start estimate if less than this to go
 my $whilerate          = 30;  # Controls the rate at which while indicator grows
@@ -27,9 +27,17 @@ my $check   = qr/check|verify|confirm/;
 # Horizontal whitespace...
 my $hws     = qr/[^\S\n]/;
 
+# Optional colon...
+my $optcolon = qr/$hws*;?/;
+
+# Automagic debugging as well...
+my $DBX = '$DB::single = $DB::single = 1;';
+
 # Implement comments-to-code source filter...
 FILTER {
     shift;
+    s/\r\n/\n/g;  # Handle win32 line endings
+
     my $intro = qr/#{3,}/;
     if (my @unknowns = grep {!/$intro/} @_) {
         croak "Incomprehensible arguments: @unknowns\n",
@@ -53,51 +61,61 @@ FILTER {
 
     # Progress bar on a C-style for loop...
     s{ ^ $hws* ( (?: [^\W\d]\w*: \s*)? for \s* \( .*? ; .*? ; .*? \) \s* ) \{
-            [ \t]* $intro \s (.*) \s* $
+            $hws* $intro $hws (.*) $hws* $
      }
      { _decode_while($1, $2) }xgem;
 
     # Requirements...
-    s{ ^ $hws* $intro [ \t] $require : \s* (.*) $ }
+    s{ ^ $hws* $intro [ \t] $require : \s* (.*?) $optcolon $hws* $ }
      { _decode_assert($1,"fatal") }gemx;
 
     # Assertions...
-    s{ ^ $hws* $intro [ \t] $check : \s* (.*) $ }
+    s{ ^ $hws* $intro [ \t] $check : \s* (.*?) $optcolon $hws* $ }
      { _decode_assert($1) }gemx;
 
     # Any other smart comment is a simple dump.
     # Dump a raw scalar (the varname is used as the label)...
-    s{ ^ $hws* $intro [ \t]+ (\$ [\w:]* \w) [ \t]* $ }
-     {Smart::Comments::_Dump(pref=>q{$1:},var=>[$1]);}gmx;
+    s{ ^ $hws* $intro [ \t]+ (\$ [\w:]* \w) $optcolon $hws* $ }
+     {Smart::Comments::_Dump(pref=>q{$1:},var=>[$1]);$DBX}gmx;
 
     # Dump a labelled scalar...
-    s{ ^ $hws* $intro [ \t] (.+ :) [ \t]* (\$ [\w:]* \w) [ \t]* $ }
-     {Smart::Comments::_Dump(pref=>q{$1},var=>[$2]);}gmx;
+    s{ ^ $hws* $intro [ \t] (.+ :) [ \t]* (\$ [\w:]* \w) $optcolon $hws* $ }
+     {Smart::Comments::_Dump(pref=>q{$1},var=>[$2]);$DBX}gmx;
 
     # Dump a raw hash or array (the varname is used as the label)...
-    s{ ^ $hws* $intro [ \t]+ ([\@%] [\w:]* \w) [ \t]* $ }
-     {Smart::Comments::_Dump(pref=>q{$1:},var=>[\\$1]);}gmx;
+    s{ ^ $hws* $intro [ \t]+ ([\@%] [\w:]* \w) $optcolon $hws* $ }
+     {Smart::Comments::_Dump(pref=>q{$1:},var=>[\\$1]);$DBX}gmx;
 
     # Dump a labelled hash or array...
-    s{ ^ $hws* $intro [ \t]+ (.+ :) [ \t]* ([\@%] [\w:]* \w) [ \t]* $ }
-     {Smart::Comments::_Dump(pref=>q{$1},var=>[\\$2]);}gmx;
+    s{ ^ $hws* $intro [ \t]+ (.+ :) [ \t]* ([\@%] [\w:]* \w) $optcolon $hws* $ }
+     {Smart::Comments::_Dump(pref=>q{$1},var=>[\\$2]);$DBX}gmx;
 
     # Dump a labelled expression...
     s{ ^ $hws* $intro [ \t]+ (.+ :) (.+) }
-     {Smart::Comments::_Dump(pref=>q{$1},var=>[$2]);}gmx;
+     {Smart::Comments::_Dump(pref=>q{$1},var=>[$2]);$DBX}gmx;
 
     # Dump an 'in progress' message
-    s{ ^ $hws* $intro (.+ [.]{3}) \s* $ }
-     {Smart::Comments::_Dump(pref=>qq{$1});}gmx;
+    s{ ^ $hws* $intro $hws* (.+ [.]{3}) \s* $ }
+     {Smart::Comments::_Dump(pref=>qq{$1});$DBX}gmx;
 
     # Dump an unlabelled expression (the expression is used as the label)...
-    s{ ^ $hws* $intro [ \t]+ (\S.+) }
-     {Smart::Comments::_Dump(pref=>q{$1:},var=>eval q{[$1]});}gmx;
+    s{ ^ $hws* $intro $hws* (.*) $optcolon \s* $ }
+     {Smart::Comments::_Dump(pref=>q{$1:},var=>Smart::Comments::_quiet_eval(q{[$1]}));$DBX}gmx;
 
     # An empty comment dumps an empty line...
     s{ ^ $hws* $intro [ \t]+ $ }
      {warn qq{\n};}gmx;
+
+    # Anything else is a literal string to be printed...
+    s{ ^ $hws* $intro \s* (.*) }
+     {Smart::Comments::_Dump(pref=>q{$1});$DBX}gmx;
+
 };
+
+sub _quiet_eval {
+    local $SIG{__WARN__} = sub{};
+    return scalar eval shift;
+}
 
 sub _uniq { my %seen; grep { !$seen{$_}++ } @_ }
 
@@ -195,17 +213,21 @@ my @progress_pats = (
    #    left     extending                 end marker of bar      right
    #    anchor   bar ("fill")               |    gap after bar    anchor
    #    ======   =======================   === =================  ====
-   qr{^(\s*.*?) (?>(\S)\2{$minfillreps,}) (\S+)\s{$minfillreps,} (\S.*)}x,
-   qr{^(\s*.*?) (?>(\S)\2{$minfillreps,}) ()   \s{$minfillreps,} (\S.*)}x,
-   qr{^(\s*.*?) (?>(\S)\2{$minfillreps,}) (\S*)                  (?=\s*$)}x,
-   qr{^(\s*.*?) ()                        ()                     () \s*$ }x,
+   qr{^(\s*.*?) (\[\]\[\])                 ()    \s*               (\S?.*)}x,
+   qr{^(\s*.*?) (\(\)\(\))                 ()    \s*               (\S?.*)}x,
+   qr{^(\s*.*?) (\{\}\{\})                 ()    \s*               (\S?.*)}x,
+   qr{^(\s*.*?) (\<\>\<\>)                 ()    \s*               (\S?.*)}x,
+   qr{^(\s*.*?) (?>(\S)\2{$minfillreps,})  (\S+) \s{$minfillreps,} (\S.*)}x,
+   qr{^(\s*.*?) (?>(\S)\2{$minfillreps,})  ()    \s{$minfillreps,} (\S.*)}x,
+   qr{^(\s*.*?) (?>(\S)\2{$minfillreps,})  (\S*)                   (?=\s*$)}x,
+   qr{^(\s*.*?) ()                         ()                      () \s*$ }x,
 );
 
 # Clean up components of progress bar (inserting defaults)...
 sub _prog_pat {
     for my $pat (@progress_pats) {
         $_[0] =~ $pat or next;
-        return ($1,$2||"",$3||"",$4||""); 
+        return ($1, $2||"", $3||"", $4||""); 
     }
     return;
 }
@@ -273,15 +295,22 @@ sub _for_progress {
         # But no less than the prespecified minimum please...
         $fillwidth = $minfillwidth if $fillwidth < $minfillwidth;
 
+        # Make enough filler...
+        my $totalfill = $fill x $fillwidth;
+
         # How big is the end of the bar...
         my $leaderwidth = length($leader);
+
+        # Truncate where?
+        my $fillend = $at==$max ? $fillwidth 
+                    :             $fillwidth*$fraction-$leaderwidth;
+        $fillend = 0 if $fillend < 0;
 
         # Now draw the bar, using carriage returns to overwrite it...
         print STDERR "\r", " "x$maxwidth,
                      "\r", $left,
                      sprintf("%-${fillwidth}s",
-                               $at==$max ? $fill x $fillwidth :
-                               $fill x ($fillwidth*$fraction-$leaderwidth)
+                               substr($totalfill, 0, $fillend)
                              . $leader),
                      $right;
 
@@ -295,7 +324,7 @@ sub _for_progress {
         }
 
         # Close off the line, if we're finished...
-        print STDERR "\n" if $at >= $max;
+        print STDERR "\r", " "x$maxwidth, "\n" if $at >= $max;
     }
 }
 
@@ -336,7 +365,8 @@ sub _while_progress {
                            *(1-$whilerate/($whilerate+$at)));
 
         # Don't update if the picture would look the same...
-        return if $prev_length == $length;
+        return
+            if length $fill && $prev_length == $length;
 
         # Otherwise, remember where we got to...
         $prev_length = $length;
@@ -344,7 +374,7 @@ sub _while_progress {
         # And print the bar...
         print STDERR "\r", " "x$maxwidth,
                      "\r", $left,
-                     sprintf("%-${fillwidth}s", $fill x $length . $leader),
+                     sprintf("%-${fillwidth}s", substr($fill x $fillwidth, 0, $length) . $leader),
                      $right;
     }
 }
@@ -361,6 +391,11 @@ use Data::Dumper 'Dumper';
 sub _Dump {
     my %args = @_;
     my ($pref, $varref, $nonl) = @args{qw(pref var nonl)};
+
+    # Handle timestamps...
+    my (undef, $file, $line) = caller;
+    $pref =~ s/<(?:now|time|when)>/scalar localtime()/ge;
+    $pref =~ s/<(?:here|place|where)>/"$file", line $line/g;
 
     # Add a newline?
     my $nl = $nonl ? "" : "\n";
@@ -385,7 +420,7 @@ sub _Dump {
 
     # How much to shave off and put back on each line...
     my $indent  = length $1;
-    my $outdent = " " x (length($pref) + 4);
+    my $outdent = " " x (length($pref) + 1);
 
     # Report "inside-out" and "flyweight" objects more cleanly...
     $dumped =~ s{bless[(] do[{]\\[(]my \$o = undef[)][}], '([^']+)' [)]}
@@ -408,7 +443,7 @@ Smart::Comments - Comments that do more than just sit there
 
 =head1 VERSION
 
-This document describes Smart::Comments version 1.0.1
+This document describes Smart::Comments version 1.0.2
 
 
 =head1 SYNOPSIS
@@ -577,6 +612,27 @@ precisely where a bug is occurring. It is also useful in non-debugging
 situations, especially when batch processing, as a simple progress
 feedback mechanism.
 
+Within a textual smart comment you can use the special sequence C<<
+<now> >> (or C<< <time> >> or C<< <when> >>) which is replaced with a
+timestamp. For example:
+
+    ### [<now>] Acquiring data...
+
+would produce something like:
+
+    ### [Fri Nov 18 15:11:15 EST 2005] Acquiring data...
+
+There are also "spacestamps": C<< <here> >> (or C<< <line> >> or C<<
+<loc> >> or C<< <place> >> or C<< <where> >>):
+
+    ### Acquiring data at <loc>...
+
+to produce something like:
+
+    ### Acquiring data at "demo.pl", line 7...
+
+You can, of course, use both in the same comment as well.
+
 =back
 
 =head2 Checks and Assertions via Comments
@@ -670,7 +726,7 @@ sequentially on a single line, rather than on consecutive lines):
 
     Evaluating..........................done
 
-The module animates the first sequence of two identical characters in
+The module animates the first sequence of three identical characters in
 the comment, provided those characters are followed by a gap of at least
 two whitespace characters. So you can specify different types of
 progress bars. For example:
@@ -762,6 +818,31 @@ would animate like so:
 Note that the non-sequential numbering in the above example is a result
 of the "hurry up and slow down" algorithm that prevents open-ended
 loops from ever reaching the right-hand side.
+
+As a special case, if the progress bar is drawn as two pairs of
+identical brackets:
+
+    for (@candidates) {       ### Evaluating: [][]
+
+    for (@candidates) {       ### Evaluating: {}{}
+
+    for (@candidates) {       ### Evaluating: ()()
+
+    for (@candidates) {       ### Evaluating: <><>
+
+Then the bar grows by repeating bracket pairs:
+
+    Evaluating: [
+
+    Evaluating: []
+
+    Evaluating: [][
+
+    Evaluating: [][]
+
+    Evaluating: [][][
+
+etc.
 
 Finally, progress bars don't have to have an animated component. They
 can just report the loop's progress numerically:

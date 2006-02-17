@@ -17,3 +17,13 @@ Revision history for Smart-Comments
 1.0.1  Wed May 25 01:05:19 2005
 
     - New release to override previous CPAN version
+
+
+1.0.2  Fri Feb 17 16:05:34 2006
+
+    - Cleaned up bracket alignment when printing variable contents
+
+    - Added [][] (and other bracket pairs) as valid fill sequences
+      (thanks Jerrad)
+
+    - Added <now>, <here>, etc. timespace stamps (thanks Tomi)

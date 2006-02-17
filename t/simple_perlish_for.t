@@ -16,6 +16,3 @@ like $STDERR, qr/Simple for loop:|                   done\r/
 
 like $STDERR, qr/Simple for loop:=========|          done\r/
                                             => 'Second iteration';
-
-like $STDERR, qr/Simple for loop:====================done\n/
-                                            => 'Third iteration';

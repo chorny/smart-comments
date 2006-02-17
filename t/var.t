@@ -10,7 +10,7 @@ my @array = (1..3);
 my %hash  = ('a'..'d');
 
 ### $scalar
-### @array
+### @array;
 ### %hash
 
 my $expected = <<"END_MESSAGES";
@@ -19,16 +19,16 @@ my $expected = <<"END_MESSAGES";
 
 
 #\## \@array: [
-#\##              1,
-#\##              2,
-#\##              3
-#\##            ]
+#\##           1,
+#\##           2,
+#\##           3
+#\##         ]
 
 
 #\## \%hash: {
-#\##             a => 'b',
-#\##             c => 'd'
-#\##           }
+#\##          a => 'b',
+#\##          c => 'd'
+#\##        }
 
 END_MESSAGES
 
@@ -48,16 +48,16 @@ my $expected2 = <<"END_MESSAGES";
 
 
 #\## arrays: [
-#\##              1,
-#\##              2,
-#\##              3
-#\##            ]
+#\##           1,
+#\##           2,
+#\##           3
+#\##         ]
 
 
 #\## and hashes too: {
-#\##                      a => 'b',
-#\##                      c => 'd'
-#\##                    }
+#\##                   a => 'b',
+#\##                   c => 'd'
+#\##                 }
 
 END_MESSAGES
 

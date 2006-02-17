@@ -9,21 +9,27 @@ my $count = 0;
 
 LABEL:
 
-while ($count < 25) {    ### Simple while loop:===[%]   done (%)
+while ($count < 100) {    ### while:===[%]   done (%)
     $count++;
 }
 
-like $STDERR, qr/Simple while loop:\[0\]           done \(0\)\r/
+use Data::Dumper 'Dumper';
+warn Dumper [ $STDERR ];
+
+like $STDERR, qr/while:\[0\]                  done \(0\)\r/
                                             => 'First iteration';
 
-like $STDERR, qr/Simple while loop:=\[3\]          done \(3\)\r/ 
+like $STDERR, qr/while:=\[2\]                 done \(2\)\r/ 
                                             => 'Second iteration';
 
-like $STDERR, qr/Simple while loop:==\[7\]         done \(7\)\r/ 
+like $STDERR, qr/while:==\[4\]                done \(4\)\r/ 
                                             => 'Third iteration';
 
-like $STDERR, qr/Simple while loop:===\[15\]      done \(15\)\r/ 
+like $STDERR, qr/while:===\[7\]               done \(7\)\r/ 
                                             => 'Fourth iteration';
 
-like $STDERR, qr/Simple while loop:====\[24\]     done \(24\)/ 
+like $STDERR, qr/while:====\[9\]              done \(9\)\r/ 
                                             => 'Fifth iteration';
+
+like $STDERR, qr/while:=====\[14\]           done \(14\)\r/ 
+                                            => 'Sixth iteration';

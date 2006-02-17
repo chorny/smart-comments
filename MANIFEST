@@ -25,3 +25,4 @@ t/var.t
 t/verify.t
 t/while.t
 t/while_num.t
+t/brackets.t
