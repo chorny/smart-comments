@@ -26,3 +26,6 @@ t/verify.t
 t/while.t
 t/while_num.t
 t/brackets.t
+t/ENV_0.t
+t/ENV_1.t
+t/ENV_str.t

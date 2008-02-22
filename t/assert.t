@@ -6,7 +6,7 @@ my $STDERR = q{};
 open *STDERR, '>', \$STDERR;
 
 my $x = 0;
-### assert: $x < 1
+### assert: $x < '1'
 
 ok length $STDERR == 0           => 'True assertion is silent';
 
@@ -57,3 +57,5 @@ $STDERR =~ s/ at \S+ line / at FILE line /;
 
 ok length $STDERR != 0           => 'False two-part assertion is loud';
 is $STDERR, $ASSERTION2          => 'False two-part assertion is loudly correct';
+
+

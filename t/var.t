@@ -16,20 +16,15 @@ my %hash  = ('a'..'d');
 my $expected = <<"END_MESSAGES";
 
 #\## \$scalar: 'scalar value'
-
-
 #\## \@array: [
 #\##           1,
 #\##           2,
 #\##           3
 #\##         ]
-
-
 #\## \%hash: {
 #\##          a => 'b',
 #\##          c => 'd'
 #\##        }
-
 END_MESSAGES
 
 is $STDERR, $expected      => 'Simple variables work';
@@ -39,13 +34,14 @@ $STDERR = q{};
 open *STDERR, '>', \$STDERR;
 
 ### scalars: $scalar
+
 ### arrays:  @array
+
 ### and hashes too:  %hash
 
 my $expected2 = <<"END_MESSAGES";
 
 #\## scalars: 'scalar value'
-
 
 #\## arrays: [
 #\##           1,
@@ -53,12 +49,10 @@ my $expected2 = <<"END_MESSAGES";
 #\##           3
 #\##         ]
 
-
 #\## and hashes too: {
 #\##                   a => 'b',
 #\##                   c => 'd'
 #\##                 }
-
 END_MESSAGES
 
 is $STDERR, $expected2      => 'Labelled variables work';

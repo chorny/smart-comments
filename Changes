@@ -27,3 +27,13 @@ Revision history for Smart-Comments
       (thanks Jerrad)
 
     - Added <now>, <here>, etc. timespace stamps (thanks Tomi)
+
+
+
+1.0.3  Fri Feb 22 17:25:30 2008
+
+    - Added -ENV config option (thanks Steven)
+
+    - Added doc note about -MSmart::Comments approach (thanks David)
+
+    - Smartened up vertical spacing of output (thanks Steve!)

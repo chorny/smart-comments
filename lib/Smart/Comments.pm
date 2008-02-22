@@ -1,6 +1,6 @@
 package Smart::Comments;
 
-use version; $VERSION = qv('1.0.2');
+use version; $VERSION = qv('1.0.3');
 
 use warnings;
 use strict;
@@ -35,16 +35,48 @@ my $DBX = '$DB::single = $DB::single = 1;';
 
 # Implement comments-to-code source filter...
 FILTER {
-    shift;
+    shift;        # Don't need the package name
     s/\r\n/\n/g;  # Handle win32 line endings
 
+    # Default introducer pattern...
     my $intro = qr/#{3,}/;
-    if (my @unknowns = grep {!/$intro/} @_) {
+
+    # Handle args...
+    my @intros;
+    while (@_) {
+        my $arg = shift @_;
+
+        if ($arg =~ m{\A -ENV \Z}xms) {
+            my $env =  $ENV{Smart_Comments} || $ENV{SMART_COMMENTS}
+                    || $ENV{SmartComments}  || $ENV{SMARTCOMMENTS}
+                    ;
+
+            return if !$env;   # i.e. if no filtering
+
+            if ($env !~ m{\A \s* 1 \s* \Z}xms) {
+                unshift @_, split m{\s+|\s*:\s*}xms, $env;
+            }
+        }
+        else {
+            push @intros, $arg;
+        }
+    }
+
+    if (my @unknowns = grep {!/$intro/} @intros) {
         croak "Incomprehensible arguments: @unknowns\n",
               "in call to 'use Smart::Comments'";
     }
-    elsif (@_) {
-        $intro = '(?-x:'.join('|',@_).')(?!\#)';
+
+    # Make non-default introducer pattern...
+    if (@intros) {
+        $intro = '(?-x:'.join('|',@intros).')(?!\#)';
+    }
+
+    # Preserve DATA handle if any...
+    if (s{ ^ __DATA__ \s* $ (.*) \z }{}xms) {
+        no strict qw< refs >;
+        my $DATA = $1;
+        open *{caller(1).'::DATA'}, '<', \$DATA or die "Internal error: $!";
     }
 
     # Progress bar on a for loop...
@@ -95,11 +127,11 @@ FILTER {
      {Smart::Comments::_Dump(pref=>q{$1},var=>[$2]);$DBX}gmx;
 
     # Dump an 'in progress' message
-    s{ ^ $hws* $intro $hws* (.+ [.]{3}) \s* $ }
+    s{ ^ $hws* $intro $hws* (.+ [.]{3}) $hws* $ }
      {Smart::Comments::_Dump(pref=>qq{$1});$DBX}gmx;
 
     # Dump an unlabelled expression (the expression is used as the label)...
-    s{ ^ $hws* $intro $hws* (.*) $optcolon \s* $ }
+    s{ ^ $hws* $intro $hws* (.*) $optcolon $hws* $ }
      {Smart::Comments::_Dump(pref=>q{$1:},var=>Smart::Comments::_quiet_eval(q{[$1]}));$DBX}gmx;
 
     # An empty comment dumps an empty line...
@@ -107,9 +139,8 @@ FILTER {
      {warn qq{\n};}gmx;
 
     # Anything else is a literal string to be printed...
-    s{ ^ $hws* $intro \s* (.*) }
+    s{ ^ $hws* $intro $hws* (.*) }
      {Smart::Comments::_Dump(pref=>q{$1});$DBX}gmx;
-
 };
 
 sub _quiet_eval {
@@ -136,7 +167,7 @@ sub _decode_assert {
                 _uniq extract_multiple($assertion, [\&extract_variable], undef, 1);
 
     # Generate the test-and-report code...
-    return qq{unless($assertion){warn "\\n", '### $assertion was not true';@vars; $fatal}};
+    return qq{unless($assertion){warn "\\n", q{### $assertion was not true};@vars; $fatal}};
 }
 
 # Generate progress-bar code for a Perlish for loop...
@@ -388,6 +419,10 @@ sub _while_progress {
 use Data::Dumper 'Dumper';
 
 # Dump a variable and then reformat the resulting string more prettily...
+my $prev_STDOUT = 0;
+my $prev_STDERR = 0;
+my %prev_caller = ( file => q{}, line => 0 );
+
 sub _Dump {
     my %args = @_;
     my ($pref, $varref, $nonl) = @args{qw(pref var nonl)};
@@ -398,12 +433,22 @@ sub _Dump {
     $pref =~ s/<(?:here|place|where)>/"$file", line $line/g;
 
     # Add a newline?
-    my $nl = $nonl ? "" : "\n";
+    my @caller = caller;
+    my $spacer_required
+        =  $prev_STDOUT != tell(*STDOUT)
+        || $prev_STDERR != tell(*STDERR)
+        || $prev_caller{file} ne $caller[1]
+        || $prev_caller{line} != $caller[2]-1;
+    $spacer_required &&= !$nonl;
+    @prev_caller{qw<file line>} = @caller[1,2];
 
     # Handle a prefix with no actual variable...
     if ($pref && !defined $varref) {
         $pref =~ s/:$//;
-        warn "$nl### $pref\n";
+        print STDERR "\n" if $spacer_required;
+        warn "### $pref\n";
+        $prev_STDOUT = tell(*STDOUT);
+        $prev_STDERR = tell(*STDERR);
         return;
     }
 
@@ -430,7 +475,10 @@ sub _Dump {
     $dumped =~ s/^[ ]{$indent}([ ]*)/### $outdent$1/gm;
 
     # Print the message...
-    warn "$nl### $pref $dumped\n$nl";
+    print STDERR "\n" if $spacer_required;
+    warn "### $pref $dumped\n";
+    $prev_STDERR = tell(*STDERR);
+    $prev_STDOUT = tell(*STDOUT);
 }
 
 1; # Magic true value required at end of module
@@ -443,7 +491,7 @@ Smart::Comments - Comments that do more than just sit there
 
 =head1 VERSION
 
-This document describes Smart::Comments version 1.0.2
+This document describes Smart::Comments version 1.0.3
 
 
 =head1 SYNOPSIS
@@ -503,6 +551,14 @@ When loaded it filters the remaining code up to the next:
 
 directive, replacing any smart comments with smart code that implements the
 comments behaviour.
+
+If you're debugging an application you can also invoke it with the module from
+the command-line:
+
+    perl -MSmart::Comments $application.pl
+
+Of course, this only enables smart comments in the application file itself,
+not in any modules that the application loads.
 
 You can also specify particular levels of smartness, by including one or more
 markers as arguments to the C<use>:
@@ -919,7 +975,31 @@ the only ones that the module accepts.
 
 =head1 CONFIGURATION AND ENVIRONMENT
 
-Smart::Comments requires no configuration files or environment variables.
+Smart::Comments can make use of an environment variable from your shell:
+C<Smart_Comments>. This variable can be specified either with a
+true/false value (i.e. 1 or 0) or with the same arguments as may be
+passed on the C<use> line when loading the module (see L<"INTERFACE">).
+The following table summarizes the behaviour:
+
+         Value of
+    $ENV{Smart_Comments}          Equivalent Perl
+
+            1                     use Smart::Comments;
+            0                      no Smart::Comments;
+        '###:####'                use Smart::Comments qw(### ####);
+        '### ####'                use Smart::Comments qw(### ####);
+
+To enable the C<Smart_Comments> environment variable, you need to load the
+module with the C<-ENV> flag:
+
+    use Smart::Comments -ENV;
+
+Note that you can still specify other arguments in the C<use> statement:
+
+    use Smart::Comments -ENV, qw(### #####);
+
+In this case, the contents of the environment variable replace the C<-ENV> in
+the argument list.
 
 
 =head1 DEPENDENCIES
