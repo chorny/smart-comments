@@ -9,15 +9,16 @@ my $builder = Module::Build->new(
     dist_author         => 'Damian Conway <DCONWAY@cpan.org>',
     dist_version_from   => 'lib/Smart/Comments.pm',
     requires => {
-        'Test::More'     => 0,
         'version'        => 0,
-        'Text::Balanced' => 0,
+        'Text::Balanced' => 2.0,
         'Data::Dumper'   => 0,
-        'Filter::Simple' => 0,
+        'Filter::Simple' => 0.80,
         'List::Util'     => 0,
         'perl'           => 5.008,
     },
-    add_to_cleanup      => [ 'Smart-Comments-*' ],
+    build_requires => {
+        'Test::More'     => 0,
+    },
 );
 
 $builder->create_build_script();
