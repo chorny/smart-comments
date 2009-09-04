@@ -19,6 +19,12 @@ my $builder = Module::Build->new(
     build_requires => {
         'Test::More'     => 0,
     },
+    meta_merge => {
+        resources=> {
+            repository => 'http://github.com/chorny/smart-comments/tree/master',
+        },
+        keywords => ['Smart comments','perl debugging','development'],
+    },
 );
 
 $builder->create_build_script();

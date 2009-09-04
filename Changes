@@ -4,6 +4,7 @@ Revision history for Smart-Comments
     - List of changes reversed
     - Require perl 5.8
     - Better requirements
+    - Better META.yml
 
 
 1.0.3  Fri Feb 22 17:25:30 2008
