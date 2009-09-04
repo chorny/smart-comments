@@ -1,23 +1,16 @@
 Revision history for Smart-Comments
 
-0.0.1  Sat May 21 12:18:31 2005
-       Initial release.
+1.0.4
+    - List of changes reversed
 
 
+1.0.3  Fri Feb 22 17:25:30 2008
 
-0.0.2  Tue May 24 01:14:09 2005
-       No changes logged
+    - Added -ENV config option (thanks Steven)
 
+    - Added doc note about -MSmart::Comments approach (thanks David)
 
-0.0.3  Tue May 24 21:54:42 2005
-
-    - New release to reacquire CPAN ownership (thanks Autrijus)
-
-
-1.0.1  Wed May 25 01:05:19 2005
-
-    - New release to override previous CPAN version
-
+    - Smartened up vertical spacing of output (thanks Steve!)
 
 1.0.2  Fri Feb 17 16:05:34 2006
 
@@ -29,11 +22,19 @@ Revision history for Smart-Comments
     - Added <now>, <here>, etc. timespace stamps (thanks Tomi)
 
 
+1.0.1  Wed May 25 01:05:19 2005
 
-1.0.3  Fri Feb 22 17:25:30 2008
+    - New release to override previous CPAN version
 
-    - Added -ENV config option (thanks Steven)
 
-    - Added doc note about -MSmart::Comments approach (thanks David)
+0.0.3  Tue May 24 21:54:42 2005
 
-    - Smartened up vertical spacing of output (thanks Steve!)
+    - New release to reacquire CPAN ownership (thanks Autrijus)
+
+
+0.0.2  Tue May 24 01:14:09 2005
+       No changes logged
+
+
+0.0.1  Sat May 21 12:18:31 2005
+       Initial release.
