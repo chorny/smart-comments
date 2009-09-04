@@ -1,3 +1,4 @@
+use 5.008;
 use strict;
 use warnings;
 use Module::Build;
@@ -14,6 +15,7 @@ my $builder = Module::Build->new(
         'Data::Dumper'   => 0,
         'Filter::Simple' => 0,
         'List::Util'     => 0,
+        'perl'           => 5.008,
     },
     add_to_cleanup      => [ 'Smart-Comments-*' ],
 );

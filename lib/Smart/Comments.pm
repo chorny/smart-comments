@@ -1,5 +1,6 @@
 package Smart::Comments;
 
+use 5.008;
 use version; $VERSION = qv('1.0.3');
 
 use warnings;

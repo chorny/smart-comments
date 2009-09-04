@@ -2,6 +2,7 @@ Revision history for Smart-Comments
 
 1.0.4
     - List of changes reversed
+    - Require perl 5.8
 
 
 1.0.3  Fri Feb 22 17:25:30 2008
