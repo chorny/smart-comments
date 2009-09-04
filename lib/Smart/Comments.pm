@@ -1,10 +1,10 @@
 package Smart::Comments;
 
 use 5.008;
-use version; $VERSION = qv('1.0.3');
-
-use warnings;
 use strict;
+use warnings;
+use version; our $VERSION = qv('1.0.4');
+
 use Carp;
 
 use List::Util qw(sum);
@@ -492,7 +492,7 @@ Smart::Comments - Comments that do more than just sit there
 
 =head1 VERSION
 
-This document describes Smart::Comments version 1.0.3
+This document describes Smart::Comments version 1.0.4
 
 
 =head1 SYNOPSIS

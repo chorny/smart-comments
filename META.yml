@@ -1,16 +1,31 @@
-# http://module-build.sourceforge.net/META-spec.html
-#XXXXXXX This is a prototype!!!  It will change in the future!!! XXXXX#
-name:         Smart-Comments
-version:      v1.0.3
-version_from: lib/Smart/Comments.pm
-installdirs:  site
+---
+name: Smart-Comments
+version: 1.0.4
+author:
+  - 'Damian Conway <DCONWAY@cpan.org>'
+abstract: Comments that do more than just sit there
+license: perl
+resources:
+  license: http://dev.perl.org/licenses/
+  repository: http://github.com/chorny/smart-comments/tree/master
 requires:
-    Data::Dumper:                  0
-    Filter::Simple:                0
-    List::Util:                    0
-    Test::More:                    0
-    Text::Balanced:                0
-    version:                       0
-
-distribution_type: module
-generated_by: ExtUtils::MakeMaker version 6.30
+  Data::Dumper: 0
+  Filter::Simple: 0.8
+  List::Util: 0
+  Text::Balanced: 2
+  perl: 5.008
+  version: 0
+build_requires:
+  Test::More: 0
+provides:
+  Smart::Comments:
+    file: lib/Smart/Comments.pm
+    version: 1.0.4
+generated_by: Module::Build version 0.33
+meta-spec:
+  url: http://module-build.sourceforge.net/META-spec-v1.4.html
+  version: 1.4
+keywords:
+  - Smart comments
+  - perl debugging
+  - development
