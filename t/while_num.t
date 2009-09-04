@@ -25,7 +25,7 @@ like $STDERR, qr/while:=\[2\]                 done \(2\)\r/
 like $STDERR, qr/while:==\[4\]                done \(4\)\r/ 
                                             => 'Third iteration';
 
-like $STDERR, qr/while:===\[7\]               done \(7\)\r/ 
+like $STDERR, qr/while:===\[6\]               done \(6\)\r/ 
                                             => 'Fourth iteration';
 
 like $STDERR, qr/while:====\[9\]              done \(9\)\r/ 

@@ -394,7 +394,7 @@ sub _while_progress {
 
         # How big does that make the bar itself (use reciprocal growth)...
         my $length = int(($fillwidth-$leaderwidth)
-                           *(1-$whilerate/($whilerate+$at)));
+                           *(1-$whilerate/($whilerate+$at))+0.000000000001);
 
         # Don't update if the picture would look the same...
         return

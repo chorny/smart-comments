@@ -5,6 +5,7 @@ Revision history for Smart-Comments
     - Require perl 5.8
     - Better requirements
     - Better META.yml
+    - Add small hack for 64 bit
 
 
 1.0.3  Fri Feb 22 17:25:30 2008
