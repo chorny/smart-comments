@@ -1011,23 +1011,23 @@ The module requires the following modules:
 
 =item *
 
-Filter::Simple
+L<Filter::Simple>
 
 =item *
 
-version.pm
+L<version.pm>
 
 =item *
 
-List::Util
+L<List::Util>
 
 =item *
 
-Data::Dumper
+L<Data::Dumper>
 
 =item *
 
-Text::Balanced
+L<Text::Balanced>
 
 =back
 
