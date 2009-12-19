@@ -1,5 +1,7 @@
 Revision history for Smart-Comments
 
+    - small pod changes (RT#16456)
+
 1.0.4
     - List of changes reversed
     - Require perl 5.8
